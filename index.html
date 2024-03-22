@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balance Tracker</title>
+<style>
+    /* Fixed frame for tables */
+    .fixed-frame {
+        border: 1px solid black;
+        overflow: auto;
+        height: 200px; /* Adjust height as needed */
+    }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    th, td {
+        border: 1px solid black;
+        padding: 8px;
+        text-align: center;
+    }
+    /* Add overlay scroll to the tables */
+    .scrollable-table {
+        max-height: 180px; /* Set the maximum height */
+        overflow-y: auto; /* Enable vertical scrollbar */
+    }
+</style>
+</head>
+<body>
+
+<h2>Balance Tracker</h2>
+
+<div class="fixed-frame">
+    <table id="balanceTable" class="scrollable-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Balance</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="balanceBody">
+            <!-- User rows will be added dynamically -->
+        </tbody>
+    </table>
+</div>
+
+<br>
+
+<h3>Add User</h3>
+<input type="text" id="newNameInput" placeholder="Enter new name">
+<input type="number" id="initialBalanceInput" placeholder="Enter initial balance">
+<button onclick="addUser()">Add</button>
+
+<br><br>
+
+<h3>Update Balance</h3>
+<input type="text" id="nameInput" placeholder="Enter name">
+<input type="number" id="amountInput" placeholder="Enter amount">
+<select id="operation">
+    <option value="add">Add</option>
+    <option value="subtract">Subtract</option>
+</select>
+<button onclick="updateBalance()">Update</button>
+
+<br><br>
+
+<h3>Summary Table</h3>
+
+<div class="fixed-frame">
+    <select id="userFilter" onchange="filterSummary()">
+        <option value="">All Users</option>
+    </select>
+
+    <table id="summaryTable" class="scrollable-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Name</th>
+                <th>Transaction</th>
+                <th>Amount</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="summaryBody">
+            <!-- Summary rows will be added dynamically -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+var transactions = {};
+
+// Load transactions from localStorage on page load
+window.onload = function() {
+    if (localStorage.getItem('transactions')) {
+        transactions = JSON.parse(localStorage.getItem('transactions'));
+        updateBalanceTable();
+        updateSummaryTable();
+        updateFilterOptions();
+    }
+};
+
+function saveTransactions() {
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+}
+
+function addUser() {
+    var newName = document.getElementById("newNameInput").value.trim(); // Trim whitespace
+    if (newName === "") {
+        alert("Please enter a name.");
+        return;
+    }
+    var initialBalance = parseInt(document.getElementById("initialBalanceInput").value);
+    
+    var balanceBody = document.getElementById("balanceBody");
+    var newRow = document.createElement("tr");
+    newRow.innerHTML = `<td>${newName.toUpperCase()}</td><td><span id="${newName.toUpperCase()}">${initialBalance}</span></td><td><button onclick="deleteUser('${newName.toUpperCase()}')">Delete</button></td>`;
+    balanceBody.appendChild(newRow);
+
+    document.getElementById("newNameInput").value = "";
+    document.getElementById("initialBalanceInput").value = "";
+
+    // Initialize transactions for the new user
+    transactions[newName.toUpperCase()] = [];
+    updateFilterOptions();
+    saveTransactions();
+}
+
+function deleteUser(name) {
+    var row = document.getElementById(name).parentNode.parentNode;
+    row.parentNode.removeChild(row);
+
+    // Remove transactions for the deleted user
+    delete transactions[name.toUpperCase()];
+    updateFilterOptions();
+    saveTransactions();
+}
+
+function updateBalance() {
+    var name = document.getElementById("nameInput").value.trim().toUpperCase(); // Trim whitespace and convert to uppercase
+    var amount = parseInt(document.getElementById("amountInput").value);
+    var operation = document.getElementById("operation").value;
+    var date = new Date().toLocaleString();
+
+    // Check if name is empty
+    if (!name) {
+        alert("Please enter a name.");
+        return;
+    }
+
+    var balanceElement = document.getElementById(name);
+    if (!balanceElement) {
+        alert("Invalid name.");
+        return;
+    }
+    
+    var currentBalance = parseInt(balanceElement.innerText);
+
+    // Add transaction to the summary table
+    var summaryBody = document.getElementById("summaryBody");
+
+    // Add transaction to the transactions object
+    transactions[name].push({ operation: operation, amount: amount, date: date });
+
+    // Update the summary table
+    if (operation === "add" || operation === "subtract") {
+        var newRow = document.createElement("tr");
+        newRow.innerHTML = `<td>${date}</td><td>${name}</td><td>${operation}</td><td>${amount}</td><td><button onclick="deleteSummaryEntry(this, '${name}', '${operation}', ${amount})">Delete</button></td>`;
+        summaryBody.appendChild(newRow);
+    }
+
+    // Update balance
+    if (operation === "add") {
+        currentBalance += amount;
+    } else if (operation === "subtract") {
+        currentBalance -= amount;
+    }
+
+    balanceElement.innerText = currentBalance;
+    saveTransactions();
+}
+
+function deleteSummaryEntry(button, name, operation, amount) {
+    var row = button.parentNode.parentNode;
+    row.parentNode.removeChild(row);
+
+    // Update balance
+    var balanceElement = document.getElementById(name);
+    var currentBalance = parseInt(balanceElement.innerText);
+    if (operation === "add") {
+        currentBalance -= amount;
+    } else if (operation === "subtract") {
+        currentBalance += amount;
+    }
+    balanceElement.innerText = currentBalance;
+
+    // Remove transaction from transactions object
+    transactions[name] = transactions[name].filter(function(transaction) {
+        return !(transaction.operation === operation && transaction.amount === amount);
+    });
+    saveTransactions();
+}
+
+function filterSummary() {
+    var selectedUser = document.getElementById("userFilter").value;
+    var summaryRows = document.getElementById("summaryBody").getElementsByTagName("tr");
+    for (var i = 0; i < summaryRows.length; i++) {
+        var row = summaryRows[i];
+        if (selectedUser === "" || row.getElementsByTagName("td")[1].innerText === selectedUser) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+    }
+}
+
+function updateFilterOptions() {
+    var userFilter = document.getElementById("userFilter");
+    userFilter.innerHTML = "<option value=''>All Users</option>";
+    for (var user in transactions) {
+        var option = document.createElement("option");
+        option.value = user;
+        option.text = user;
+        userFilter.add(option);
+    }
+    saveTransactions();
+}
+
+function updateBalanceTable() {
+    var balanceBody = document.getElementById("balanceBody");
+    balanceBody.innerHTML = ""; // Clear existing rows
+    for (var user in transactions) {
+        var newRow = document.createElement("tr");
+        newRow.innerHTML = `<td>${user}</td><td><span id="${user}">${calculateBalance(user)}</span></td><td><button onclick="deleteUser('${user}')">Delete</button></td>`;
+        balanceBody.appendChild(newRow);
+    }
+}
+
+function updateSummaryTable() {
+    var summaryBody = document.getElementById("summaryBody");
+    summaryBody.innerHTML = ""; // Clear existing rows
+    for (var user in transactions) {
+        transactions[user].forEach(function(transaction) {
+            var newRow = document.createElement("tr");
+            newRow.innerHTML = `<td>${transaction.date}</td><td>${user}</td><td>${transaction.operation}</td><td>${transaction.amount}</td><td><button onclick="deleteSummaryEntry(this, '${user}', '${transaction.operation}', ${transaction.amount})">Delete</button></td>`;
+            summaryBody.appendChild(newRow);
+        });
+    }
+}
+
+function calculateBalance(user) {
+    var balance = 0;
+    transactions[user].forEach(function(transaction) {
+        if (transaction.operation === "add") {
+            balance += transaction.amount;
+        } else if (transaction.operation === "subtract") {
+            balance -= transaction.amount;
+        }
+    });
+    return balance;
+}
+
+</script>
+
+</body>
+</html>
